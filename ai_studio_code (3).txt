@@ -1,0 +1,238 @@
+import React, { useReducer } from 'react';
+import { UploadCloud, CheckCircle2, Pause, Play, RotateCcw, Lock, Globe, EyeOff, Film } from 'lucide-react';
+import { VideoItem } from '../types/video';
+
+interface UploadState {
+  progress: number;
+  status: 'idle' | 'uploading' | 'paused' | 'processing' | 'completed' | 'error';
+  speedMBs: number;
+  etaSeconds: number;
+  title: string;
+  titleError: string | null;
+  visibility: 'public' | 'unlisted' | 'private';
+  notifyFollowers: boolean;
+  commentsAllowed: boolean;
+  ageRestricted: boolean;
+}
+
+type UploadAction =
+  | { type: 'SET_PROGRESS'; payload: number }
+  | { type: 'SET_STATUS'; payload: UploadState['status'] }
+  | { type: 'SET_SPEED'; speed: number; eta: number }
+  | { type: 'SET_TITLE'; payload: string }
+  | { type: 'SET_VISIBILITY'; payload: UploadState['visibility'] }
+  | { type: 'TOGGLE_NOTIFY' }
+  | { type: 'TOGGLE_COMMENTS' }
+  | { type: 'TOGGLE_AGE_RESTRICT' }
+  | { type: 'RESET' };
+
+const initialState: UploadState = {
+  progress: 45,
+  status: 'uploading',
+  speedMBs: 8.4,
+  etaSeconds: 42,
+  title: 'Cinematic Visual Effects Showcase 2026',
+  titleError: null,
+  visibility: 'public',
+  notifyFollowers: true,
+  commentsAllowed: true,
+  ageRestricted: false,
+};
+
+function uploadReducer(state: UploadState, action: UploadAction): UploadState {
+  switch (action.type) {
+    case 'SET_PROGRESS':
+      return {
+        ...state,
+        progress: action.payload,
+        status: action.payload >= 100 ? 'completed' : 'uploading',
+      };
+    case 'SET_STATUS':
+      return { ...state, status: action.payload };
+    case 'SET_SPEED':
+      return { ...state, speedMBs: action.speed, etaSeconds: action.eta };
+    case 'SET_TITLE': {
+      const cleaned = action.payload.replace(/\.(mp4|mov|mkv|avi)$/i, '');
+      const err = cleaned.trim().length === 0 ? 'Title cannot be empty.' : null;
+      return { ...state, title: cleaned, titleError: err };
+    }
+    case 'SET_VISIBILITY':
+      return { ...state, visibility: action.payload };
+    case 'TOGGLE_NOTIFY':
+      return { ...state, notifyFollowers: !state.notifyFollowers };
+    case 'TOGGLE_COMMENTS':
+      return { ...state, commentsAllowed: !state.commentsAllowed };
+    case 'TOGGLE_AGE_RESTRICT':
+      return { ...state, ageRestricted: !state.ageRestricted };
+    case 'RESET':
+      return initialState;
+    default:
+      return state;
+  }
+}
+
+interface UploadManagerProps {
+  onPublish: (video: Partial<VideoItem>) => void;
+  onCancel: () => void;
+}
+
+export const UploadManager: React.FC<UploadManagerProps> = ({ onPublish, onCancel }) => {
+  const [state, dispatch] = useReducer(uploadReducer, initialState);
+
+  const handleSimulateProgress = () => {
+    if (state.progress < 100) {
+      dispatch({ type: 'SET_PROGRESS', payload: Math.min(100, state.progress + 15) });
+    }
+  };
+
+  const handlePublish = () => {
+    if (!state.title.trim()) {
+      dispatch({ type: 'SET_TITLE', payload: '' });
+      return;
+    }
+    onPublish({
+      title: state.title,
+      visibility: state.visibility,
+      notifySubscribers: state.notifyFollowers,
+      ageRestricted: state.ageRestricted,
+    });
+  };
+
+  return (
+    <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+            <UploadCloud className="h-6 w-6" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Upload Manager</h3>
+            <p className="text-xs text-slate-400">useReducer-powered multi-state upload engine</p>
+          </div>
+        </div>
+        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+          state.status === 'completed'
+            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+            : 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300'
+        }`}>
+          {state.status}
+        </span>
+      </div>
+
+      {/* Progress Bar & Stats */}
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+          <span>Upload Progress ({state.progress}%)</span>
+          <span>{state.speedMBs} MB/s · ETA: {state.etaSeconds}s</span>
+        </div>
+        <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 transition-all duration-300"
+            style={{ width: `${state.progress}%` }}
+          />
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={() => dispatch({ type: 'SET_STATUS', payload: state.status === 'paused' ? 'uploading' : 'paused' })}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            {state.status === 'paused' ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            <span>{state.status === 'paused' ? 'Resume' : 'Pause'}</span>
+          </button>
+          <button
+            onClick={handleSimulateProgress}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>Simulate +15%</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Title Input */}
+      <div className="space-y-1">
+        <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Video Title</label>
+        <input
+          type="text"
+          value={state.title}
+          onChange={(e) => dispatch({ type: 'SET_TITLE', payload: e.target.value })}
+          placeholder="Enter video title..."
+          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        {state.titleError && <p className="text-xs text-rose-500 font-semibold">{state.titleError}</p>}
+      </div>
+
+      {/* Privacy Toggles */}
+      <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Visibility & Privacy</label>
+        <div className="grid grid-cols-3 gap-3">
+          {(['public', 'unlisted', 'private'] as const).map((vis) => (
+            <button
+              key={vis}
+              type="button"
+              onClick={() => dispatch({ type: 'SET_VISIBILITY', payload: vis })}
+              className={`p-3 rounded-2xl border text-center text-xs font-semibold capitalize flex flex-col items-center gap-1.5 transition-all ${
+                state.visibility === vis
+                  ? 'border-purple-600 bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              {vis === 'public' && <Globe className="h-4 w-4" />}
+              {vis === 'unlisted' && <EyeOff className="h-4 w-4" />}
+              {vis === 'private' && <Lock className="h-4 w-4" />}
+              <span>{vis}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Checkbox toggles */}
+        <div className="space-y-2 pt-2 text-xs">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={state.notifyFollowers}
+              onChange={() => dispatch({ type: 'TOGGLE_NOTIFY' })}
+              className="rounded text-purple-600 focus:ring-purple-500"
+            />
+            <span className="text-slate-700 dark:text-slate-300">Notify followers of new release</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={state.commentsAllowed}
+              onChange={() => dispatch({ type: 'TOGGLE_COMMENTS' })}
+              className="rounded text-purple-600 focus:ring-purple-500"
+            />
+            <span className="text-slate-700 dark:text-slate-300">Allow community comments</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={state.ageRestricted}
+              onChange={() => dispatch({ type: 'TOGGLE_AGE_RESTRICT' })}
+              className="rounded text-purple-600 focus:ring-purple-500"
+            />
+            <span className="text-slate-700 dark:text-slate-300">Age restriction (18+ only)</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handlePublish}
+          className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold shadow-md hover:brightness-110 active:scale-95 transition-all"
+        >
+          Save & Publish
+        </button>
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,145 @@
+import React, { useRef, useState, useEffect } from 'react';
+import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, AlertTriangle } from 'lucide-react';
+import { VideoItem } from '../types/video';
+
+interface VideoPlayerProps {
+  video: VideoItem;
+}
+
+const BACKUP_STREAM = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setIsPlaying(false);
+    setHasError(false);
+    if (videoRef.current) {
+      videoRef.current.load();
+    }
+  }, [video.id]);
+
+  const togglePlay = () => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {
+        // Autoplay policy or playback failure
+        setIsPlaying(false);
+      });
+    }
+  };
+
+  const toggleMute = () => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = !isMuted;
+    setIsMuted(!isMuted);
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+      setDuration(videoRef.current.duration || 0);
+    }
+  };
+
+  const handleSwitchMirror = () => {
+    setHasError(false);
+    if (videoRef.current) {
+      videoRef.current.src = BACKUP_STREAM;
+      videoRef.current.load();
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  };
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-3xl bg-black shadow-2xl group">
+      <video
+        ref={videoRef}
+        src={video.url}
+        poster={video.poster}
+        onTimeUpdate={handleTimeUpdate}
+        onError={() => setHasError(true)}
+        className="h-full w-full object-contain"
+        playsInline
+      />
+
+      {/* Non-blocking Playback Error Fallback Overlay */}
+      {hasError && (
+        <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center text-white space-y-3 z-30">
+          <AlertTriangle className="h-10 w-10 text-amber-500 animate-bounce" />
+          <h4 className="text-base font-bold">Stream Playback Warning</h4>
+          <p className="text-xs text-slate-300 max-w-sm">
+            Primary stream encountered CORS/codec limits. Switch to the Vio mirror instantly.
+          </p>
+          <button
+            onClick={handleSwitchMirror}
+            className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white shadow-lg transition-all"
+          >
+            Stream via Vio streaming Mirror
+          </button>
+        </div>
+      )}
+
+      {/* Video Controls Overlay */}
+      <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-2">
+        {/* Progress scrub */}
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={currentTime}
+          onChange={(e) => {
+            if (videoRef.current) {
+              videoRef.current.currentTime = Number(e.target.value);
+            }
+          }}
+          className="w-full h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-red-500"
+        />
+
+        <div className="flex items-center justify-between text-white text-xs">
+          <div className="flex items-center gap-3">
+            <button onClick={togglePlay} className="p-1 hover:text-red-500">
+              {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+            </button>
+            <button onClick={toggleMute} className="p-1 hover:text-red-500">
+              {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </button>
+            <span>
+              {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} /{' '}
+              {Math.floor(duration / 60)}:{Math.floor(duration % 60).toString().padStart(2, '0')}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (videoRef.current) videoRef.current.currentTime = 0;
+              }}
+              title="Replay"
+              className="p-1 hover:text-red-500"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => {
+                if (videoRef.current?.requestFullscreen) videoRef.current.requestFullscreen();
+              }}
+              title="Fullscreen"
+              className="p-1 hover:text-red-500"
+            >
+              <Maximize className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
